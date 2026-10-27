@@ -12,20 +12,21 @@ fact.
 ## The cases
 
 All of these were reported in public, with details, by the people (and agents)
-who hit them. They are summarized here as reported; see [Sources](#sources).
+who hit them, and checked against their original reports. They are summarized
+here as reported.
 
 | Shape | What was reported | Signal | Effect |
 |---|---|---|---|
-| **Invalid input, accepted** | `icacls /grant:r user:(OI)(CI)F` on a *file*. Inheritance flags only make sense on folders | exit 0 | No ACE written; the file was left with an empty protected DACL, and even the owner got *access denied* |
-| **Success printed unconditionally** | A PowerShell migration called `ConvertFrom-SecureString` with a wrong parameter. A non-terminating error set the variable to null, and the script went on | "Migration complete" | Wrote an empty credential blob, then deleted the only plaintext copy |
-| **Write accepted, field dropped** | Replies posted to a forum API | 201, body intact | `parent_id` silently dropped: six replies landed as top-level comments |
-| **Accepted is not visible** | A post created as public; a reply "posted" | 201 `visibility: public`; "posted" | Read back 60 s later as *unlisted*; the reply was held for moderation |
-| **Published is not served** | A static host deploy | "Success! Published" | Domain suspended pending email verification within 90 minutes |
+| **Invalid input, accepted** | `icacls file /inheritance:r /grant:r group:(OI)(CI)F` on a *file*. Inheritance flags only make sense on folders | "Successfully processed 1 files", exit 0 | No ACE written. Inherited entries were already removed, so the file was left with an empty protected DACL, and even the owning administrator got *access denied* |
+| **Success printed unconditionally** | A PowerShell migration called `ConvertFrom-SecureString` with a wrong parameter. A non-terminating error set the variable to null, and the script went on | "DPAPI blob written" | Wrote a 0-byte credential blob, then deleted the only plaintext copy |
+| **Write accepted, field dropped** | Six replies posted to a forum API by a client that silently lost the parent id on the way | 201 each, body intact | All six landed as top-level comments. Only reading back `parent_id` and comparing it with the intended value caught it: a "missing?" check would not, since top-level comments read null too |
+| **Accepted is not visible** | A post created as public; a reply reported as posted | `visibility: public` in the create response; "posted" | Read back 60 s later, the post was *unlisted*; the reply had been held back for a check |
+| **Published is not served** | A static site deploy | "Success! - Published" | The domain is suspended unless an emailed verification link is clicked within 90 minutes |
 | **Receipt before the thing exists** | A notarization API | 201 with a `proof_url` | The URL returned 404, still 404 three minutes later |
-| **Counted, not written** | A document ingestion run; a file migration | "3,314 chunks ingested"; exit 0 | Nothing written in either case. The migration was caught only by a separate process whose read was denied |
-| **Unknown names ignored** | An API filter sent as `author` when the API only knew `authors` | 200 | Unfiltered data, read as filtered. Values were validated strictly; names were not checked at all |
+| **Counted, not written** | A document ingestion run | "3,314 chunks ingested", no error | Nothing was written, and for a while the only number anyone had was the one the writer printed |
+| **Unknown names ignored** | A per-author filter tried as `author`, `agent`, `agent_id` and `pubkey`, on an API that only declares `authors` | 200 | Unfiltered rows every time, so the auditor concluded that no per-author filter existed. The API rejected bad *values* with 422 but never checked *names* |
 | **The monitor died, the work did not** | A scheduler's heartbeat files | (silence) | Heartbeats stopped for 40 days while jobs kept running. Nobody noticed, because the live work looked like proof of life |
-| **The verifier checks nothing** | A signature verifier looked up a field under the wrong name | "VERIFIED" | No check ran at all |
+| **The verifier checks nothing** | A signature verifier read the key from `ed25519_public_key`; the API's field was `public_key` | "VERIFIED" | It found no keys, skipped every signature check, and passed anyway |
 
 ## What they have in common
 
@@ -86,13 +87,8 @@ purpose. A checker that has never failed may not be checking.
 
 ### 7. Check names as well as values
 APIs that validate values strictly often accept any parameter name. Find out
-which ones do with [silentparams](https://github.com/), and treat filtered
+which ones do with [silentparams](https://github.com/novasdiego1/silentparams), and treat filtered
 results from them with suspicion.
-
-## Sources
-
-The cases above were reported by participants of The Colony, a forum where AI
-agents and their operators share findings. Links will be added on publication.
 
 ## License
 
